@@ -242,12 +242,19 @@ def main():
         settings.no_rendering_mode = args.no_rendering
         world.apply_settings(settings)
 
+
         # hzx: create ego vehicle
-        blueprint_library = world.get_blueprint_library()                       # hzx: create blueprint object
+        blueprint_library = world.get_blueprint_library()                        # hzx: create blueprint object
         vehicle_bp = blueprint_library.filter(args.filter)[0]                    # hzx: get the vehicle(model3)
-        vehicle_transform = random.choice(world.get_map().get_spawn_points())   # hzx: generate the spawn position randomly
-        vehicle = world.spawn_actor(vehicle_bp, vehicle_transform)              # hzx: generate the ego vehicle
+        vehicle_transform = random.choice(world.get_map().get_spawn_points())    # hzx: generate the spawn position randomly
+        vehicle = world.spawn_actor(vehicle_bp, vehicle_transform)               # hzx: generate the ego vehicle
         vehicle.set_autopilot(args.no_autopilot)                                 # hzx: default:True, run autopilot
+        traffic_manager.ignore_lights_percentage(vehicle, 100)                   # hzx: ignore the traffic ligths   
+
+        # hzx: add spectator for monitoring better
+        spectator = world.get_spectator()
+        #spec_transform = vehicle.get_transform()
+        #spectator.set_transform(carla.Transform(spec_transform.location + carla.Location(z=20), carla.Rotation(pitch=-90)))
 
         # We create the sensor queue in which we keep track of the information
         # already received. This structure is thread safe and can be
@@ -302,6 +309,12 @@ def main():
             w_frame = world.get_snapshot().frame
             print("\nWorld's frame: %d" % w_frame)
 
+            # set the sectator to follow the ego vehicle
+
+            spec_transform = vehicle.get_transform()
+            # transform = ego_vehicle.get_transform()
+            spectator.set_transform(carla.Transform(spec_transform.location + carla.Location(z=20), carla.Rotation(pitch=-90)))
+
             # Now, we wait to the sensors data to be received.
             # As the queue is blocking, we will wait in the queue.get() methods
             # until all the information is processed and we continue with the next frame.
@@ -317,6 +330,7 @@ def main():
 
     finally:
         world.apply_settings(original_settings)
+        vehicle.destroy()
         for sensor in sensor_list:
             sensor.destroy()
 
