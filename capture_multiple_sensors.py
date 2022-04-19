@@ -139,7 +139,10 @@ def parser():
         type=int,
         help='image height (default: 1080)'
     )
-
+    argparser.add_argument(
+        '-s', '--save',
+        action='store_false',
+        help='disables to save the data to the disk')
         
     return argparser.parse_args()
 
@@ -148,7 +151,7 @@ def parser():
 # This is where you receive the sensor data and
 # process it as you liked and the important part is that,
 # at the end, it should include an element into the sensor queue.
-def sensor_callback(sensor_data, sensor_queue, sensor_name):
+def sensor_callback(sensor_data, sensor_queue, sensor_name, args):
     # Do stuff with the sensor_data data like save it to disk
     # Then you just need to add to the queue
 
@@ -159,11 +162,12 @@ def sensor_callback(sensor_data, sensor_queue, sensor_name):
          array = array[:, :, ::-1]
          # array = pygame.surfarray.make_surface(array.swapaxes(0, 1))
          im = Image.fromarray(array)
-         outputImgPath="../output/img/"
-         filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
-         if not os.path.exists(outputImgPath):
-             os.makedirs(outputImgPath)
-         im.save(outputImgPath+str(filename)+'.jpg')
+         if args.save:
+            outputImgPath="../output/img/"
+            filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+            if not os.path.exists(outputImgPath):
+                os.makedirs(outputImgPath)
+            im.save(outputImgPath+str(filename)+'.jpg')
         # sensor_data.save_to_disk(os.path.join('../outputs/output_synchronized', '%06d.png' % sensor_data.frame))
 
     if 'lidar' in sensor_name:
@@ -171,12 +175,12 @@ def sensor_callback(sensor_data, sensor_queue, sensor_name):
         colors ready to be consumed by Open3D"""
         data = np.copy(np.frombuffer(sensor_data.raw_data, dtype=np.dtype('f4')))
         data = np.reshape(data, (int(data.shape[0] / 4), 4))
-
-        outputLidarPath="../output/lidar/"
-        filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
-        if not os.path.exists(outputLidarPath):
-            os.makedirs(outputLidarPath)
-        np.savetxt(outputLidarPath+str(filename)+'.txt', data)
+        if args.save:
+            outputLidarPath="../output/lidar/"
+            filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+            if not os.path.exists(outputLidarPath):
+                os.makedirs(outputLidarPath)
+            np.savetxt(outputLidarPath+str(filename)+'.txt', data)
 
         '''
         # Isolate the intensity and compute a color for it
@@ -207,12 +211,12 @@ def sensor_callback(sensor_data, sensor_queue, sensor_name):
         '''
     if 'gnss' in sensor_name:
         data = np.array([sensor_data.latitude, sensor_data.longitude, sensor_data.altitude])
-        print(type(data), data)
-        outputGnssPath = '../output/gnss/'
-        filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
-        if not os.path.exists(outputGnssPath):
-            os.makedirs(outputGnssPath)
-        np.savetxt(outputGnssPath+str(filename)+'.txt', data)
+        if args.save:
+            outputGnssPath = '../output/gnss/'
+            filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+            if not os.path.exists(outputGnssPath):
+                os.makedirs(outputGnssPath)
+            np.savetxt(outputGnssPath+str(filename)+'.txt', data)
 
     sensor_queue.put((sensor_data.frame, sensor_name))
 
@@ -233,12 +237,12 @@ def main():
         original_settings = world.get_settings()
         settings = world.get_settings()
         traffic_manager = client.get_trafficmanager(8000)
-        traffic_manager.set_synchronous_mode(True)
+        traffic_manager.set_synchronous_mode(True)                  # hzx: In synchronous mode, autopilot depends on the traffic manager
 
         # We set CARLA syncronous mode
         delta = 0.05
-        settings.fixed_delta_seconds = delta
-        settings.synchronous_mode = True
+        settings.fixed_delta_seconds = delta                        # hzx: set fixed time-step, one tick = 5ms, i.e. 20fps
+        settings.synchronous_mode = True                            # hzx: In synchronous mode, server will wait the client to finish its current work, then update
         settings.no_rendering_mode = args.no_rendering
         world.apply_settings(settings)
 
@@ -287,18 +291,18 @@ def main():
 
         cam01 = world.spawn_actor(cam_bp, camera_transform, attach_to=vehicle)
         # set the callback function
-        cam01.listen(lambda data: sensor_callback(data, sensor_queue, "camera01"))
+        cam01.listen(lambda data: sensor_callback(data, sensor_queue, "camera01", args))
         sensor_list.append(cam01)
 
         lidar_bp.set_attribute('points_per_second', '100000')
         lidar01_transform = carla.Transform(carla.Location(x=-0.5, z=1.8) + user_offset)
         lidar01 = world.spawn_actor(lidar_bp, lidar01_transform, attach_to=vehicle)
-        lidar01.listen(lambda data: sensor_callback(data, sensor_queue, "lidar01"))
+        lidar01.listen(lambda data: sensor_callback(data, sensor_queue, "lidar01", args))
         sensor_list.append(lidar01)
 
         gnss_transform = carla.Transform(carla.Location(x=-0.5, z=1.8) + user_offset)
         gnss = world.spawn_actor(gnss_bp, gnss_transform, attach_to=vehicle)
-        gnss.listen(lambda data: sensor_callback(data, sensor_queue, "gnss"))
+        gnss.listen(lambda data: sensor_callback(data, sensor_queue, "gnss", args))
         sensor_list.append(gnss)
 
 
@@ -309,10 +313,8 @@ def main():
             w_frame = world.get_snapshot().frame
             print("\nWorld's frame: %d" % w_frame)
 
-            # set the sectator to follow the ego vehicle
-
+            # hzx: set the sectator to follow the ego vehicle
             spec_transform = vehicle.get_transform()
-            # transform = ego_vehicle.get_transform()
             spectator.set_transform(carla.Transform(spec_transform.location + carla.Location(z=20), carla.Rotation(pitch=-90)))
 
             # Now, we wait to the sensors data to be received.
@@ -322,14 +324,14 @@ def main():
             # not received in this time we continue.
             try:
                 for _ in range(len(sensor_list)):
-                    s_frame = sensor_queue.get(True, 1.0)
+                    s_frame = sensor_queue.get(True, 1.0)                           # hzx: neccessary for synchronous mode
                     print("    Frame: %d   Sensor: %s" % (s_frame[0], s_frame[1]))
 
             except Empty:
                 print("    Some of the sensor information is missed")
 
     finally:
-        world.apply_settings(original_settings)
+        world.apply_settings(original_settings)     # hzx: back to original setting, otherwise, the world will crash as it can't find the synchronous client
         vehicle.destroy()
         for sensor in sensor_list:
             sensor.destroy()
