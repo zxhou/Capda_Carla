@@ -159,8 +159,10 @@ def sensor_callback(sensor_data, sensor_queue, sensor_name):
          array = array[:, :, ::-1]
          # array = pygame.surfarray.make_surface(array.swapaxes(0, 1))
          im = Image.fromarray(array)
-         outputImgPath="../output/"
+         outputImgPath="../output/img/"
          filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+         if not os.path.exists(outputImgPath):
+             os.makedirs(outputImgPath)
          im.save(outputImgPath+str(filename)+'.jpg')
         # sensor_data.save_to_disk(os.path.join('../outputs/output_synchronized', '%06d.png' % sensor_data.frame))
 
@@ -168,12 +170,13 @@ def sensor_callback(sensor_data, sensor_queue, sensor_name):
         """Prepares a point cloud with intensity
         colors ready to be consumed by Open3D"""
         data = np.copy(np.frombuffer(sensor_data.raw_data, dtype=np.dtype('f4')))
-        print('data shape:', data.shape)
         data = np.reshape(data, (int(data.shape[0] / 4), 4))
 
-        outputImgPath="../output/"
+        outputLidarPath="../output/lidar/"
         filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
-        np.savetxt(outputImgPath+str(filename)+'.txt', data)
+        if not os.path.exists(outputLidarPath):
+            os.makedirs(outputLidarPath)
+        np.savetxt(outputLidarPath+str(filename)+'.txt', data)
 
         '''
         # Isolate the intensity and compute a color for it
@@ -202,6 +205,15 @@ def sensor_callback(sensor_data, sensor_queue, sensor_name):
         point_list.points = o3d.utility.Vector3dVector(points)
         point_list.colors = o3d.utility.Vector3dVector(int_color)
         '''
+    if 'gnss' in sensor_name:
+        data = np.array([sensor_data.latitude, sensor_data.longitude, sensor_data.altitude])
+        print(type(data), data)
+        outputGnssPath = '../output/gnss/'
+        filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+        if not os.path.exists(outputGnssPath):
+            os.makedirs(outputGnssPath)
+        np.savetxt(outputGnssPath+str(filename)+'.txt', data)
+
     sensor_queue.put((sensor_data.frame, sensor_name))
 
 
@@ -250,17 +262,21 @@ def main():
         #camera_bp.set_attribute('fov', '90')                                    # hzx: image field of view
         #camera_bp.set_attribute('sensor_tick', str(0.04))                       # hzx: simulation seconds between sensor captures (ticks)
 
-        user_offset = carla.Location(args.x, args.y, args.z)
-        # camera relative position related to the vehicle
-        #camera_transform = carla.Transform(carla.Location(0, 0, 2))
-        camera_transform = carla.Transform(carla.Location(x=-0.5, z=1.8) + user_offset)
-    
-        
-
         lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
+
+        # hzx: Blueprints for the gnss
+        gnss_bp = blueprint_library.find('sensor.other.gnss')
+
+
+
+        user_offset = carla.Location(args.x, args.y, args.z)
 
         # We create all the sensors and keep them in a list for convenience.
         sensor_list = []
+
+        # camera relative position related to the vehicle
+        #camera_transform = carla.Transform(carla.Location(0, 0, 2))
+        camera_transform = carla.Transform(carla.Location(x=-0.5, z=1.8) + user_offset)
 
         cam01 = world.spawn_actor(cam_bp, camera_transform, attach_to=vehicle)
         # set the callback function
@@ -272,6 +288,11 @@ def main():
         lidar01 = world.spawn_actor(lidar_bp, lidar01_transform, attach_to=vehicle)
         lidar01.listen(lambda data: sensor_callback(data, sensor_queue, "lidar01"))
         sensor_list.append(lidar01)
+
+        gnss_transform = carla.Transform(carla.Location(x=-0.5, z=1.8) + user_offset)
+        gnss = world.spawn_actor(gnss_bp, gnss_transform, attach_to=vehicle)
+        gnss.listen(lambda data: sensor_callback(data, sensor_queue, "gnss"))
+        sensor_list.append(gnss)
 
 
         # Main loop
@@ -306,237 +327,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print(' - Exited by user.')
 
-
-
-
-
-
-'''
-
-def camera_callback(sensor_data, sensor_queue):
-    array = np.frombuffer(sensor_data.raw_data, dtype=np.dtype("uint8"))
-    array = np.reshape(array, (1080, 1920, 4))
-    array = array[:, :, :3]
-    array = array[:, :, ::-1]
-    # array = pygame.surfarray.make_surface(array.swapaxes(0, 1))
-    im = Image.fromarray(array)
-    outputImgPath="./output/"
-    filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    im.save(outputImgPath+str(filename)+'.jpg')
-# sensor_data.save_to_disk(os.path.join('../outputs/output_synchronized', '%06d.png' % sensor_data.frame))
-    sensor_queue.put(sensor_data.frame)
-    
-
-
-def lidar_callback(point_cloud, point_list):
-    """Prepares a point cloud with intensity
-    colors ready to be consumed by Open3D"""
-    data = np.copy(np.frombuffer(point_cloud.raw_data, dtype=np.dtype('f4')))
-    data = np.reshape(data, (int(data.shape[0] / 4), 4))
-
-    # Isolate the intensity and compute a color for it
-    intensity = data[:, -1]
-    intensity_col = 1.0 - np.log(intensity) / np.log(np.exp(-0.004 * 100))
-    int_color = np.c_[
-        np.interp(intensity_col, VID_RANGE, VIRIDIS[:, 0]),
-        np.interp(intensity_col, VID_RANGE, VIRIDIS[:, 1]),
-        np.interp(intensity_col, VID_RANGE, VIRIDIS[:, 2])]
-
-    # Isolate the 3D data
-    points = data[:, :-1]
-
-    # We're negating the y to correclty visualize a world that matches
-    # what we see in Unreal since Open3D uses a right-handed coordinate system
-    points[:, :1] = -points[:, :1]
-
-    # # An example of converting points from sensor to vehicle space if we had
-    # # a carla.Transform variable named "tran":
-    # points = np.append(points, np.ones((points.shape[0], 1)), axis=1)
-    # points = np.dot(tran.get_matrix(), points.T).T
-    # points = points[:, :-1]
-
-    point_list.points = o3d.utility.Vector3dVector(points)
-    point_list.colors = o3d.utility.Vector3dVector(int_color)
-
-
-def semantic_lidar_callback(point_cloud, point_list):
-    """Prepares a point cloud with semantic segmentation
-    colors ready to be consumed by Open3D"""
-    data = np.frombuffer(point_cloud.raw_data, dtype=np.dtype([
-        ('x', np.float32), ('y', np.float32), ('z', np.float32),
-        ('CosAngle', np.float32), ('ObjIdx', np.uint32), ('ObjTag', np.uint32)]))
-
-    # We're negating the y to correclty visualize a world that matches
-    # what we see in Unreal since Open3D uses a right-handed coordinate system
-    points = np.array([data['x'], -data['y'], data['z']]).T
-
-    # # An example of adding some noise to our data if needed:
-    # points += np.random.uniform(-0.05, 0.05, size=points.shape)
-
-    # Colorize the pointcloud based on the CityScapes color palette
-    labels = np.array(data['ObjTag'])
-    int_color = LABEL_COLORS[labels]
-
-    # # In case you want to make the color intensity depending
-    # # of the incident ray angle, you can use:
-    # int_color *= np.array(data['CosAngle'])[:, None]
-
-    point_list.points = o3d.utility.Vector3dVector(points)
-    point_list.colors = o3d.utility.Vector3dVector(int_color)
-
-
-def generate_lidar_bp(args, world, blueprint_library, delta):
-    """Generates a CARLA blueprint based on the script parameters"""
-    if args.semantic:
-        lidar_bp = world.get_blueprint_library().find('sensor.lidar.ray_cast_semantic')
-    else:
-        lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
-        if args.no_noise:
-            lidar_bp.set_attribute('dropoff_general_rate', '0.0')
-            lidar_bp.set_attribute('dropoff_intensity_limit', '1.0')
-            lidar_bp.set_attribute('dropoff_zero_intensity', '0.0')
-        else:
-            lidar_bp.set_attribute('noise_stddev', '0.2')
-
-    lidar_bp.set_attribute('upper_fov', str(args.upper_fov))
-    lidar_bp.set_attribute('lower_fov', str(args.lower_fov))
-    lidar_bp.set_attribute('channels', str(args.channels))
-    lidar_bp.set_attribute('range', str(args.range))
-    lidar_bp.set_attribute('rotation_frequency', str(1.0 / delta))
-    lidar_bp.set_attribute('points_per_second', str(args.points_per_second))
-    return lidar_bp
-
-
-def add_open3d_axis(vis):
-    """Add a small 3D axis on Open3D Visualizer"""
-    axis = o3d.geometry.LineSet()
-    axis.points = o3d.utility.Vector3dVector(np.array([
-        [0.0, 0.0, 0.0],
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0]]))
-    axis.lines = o3d.utility.Vector2iVector(np.array([
-        [0, 1],
-        [0, 2],
-        [0, 3]]))
-    axis.colors = o3d.utility.Vector3dVector(np.array([
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0]]))
-    vis.add_geometry(axis)
-
-
-def main():
-    """Main function of the script"""
-    args = parser()
-    client = carla.Client(args.host, args.port)
-    client.set_timeout(2.0)
-    world = client.get_world()
-
-    try:
-        original_settings = world.get_settings()
-        settings = world.get_settings()
-        traffic_manager = client.get_trafficmanager(8000)
-        traffic_manager.set_synchronous_mode(True)
-
-        delta = 0.05
-
-        settings.fixed_delta_seconds = delta
-        settings.synchronous_mode = True
-        settings.no_rendering_mode = args.no_rendering
-        world.apply_settings(settings)
-
-        # hzx: create ego vehicle
-        blueprint_library = world.get_blueprint_library()                       # hzx: create blueprint object
-        vehicle_bp = blueprint_library.filter(args.filter)[0]                    # hzx: get the vehicle(model3)
-        vehicle_transform = random.choice(world.get_map().get_spawn_points())   # hzx: generate the spawn position randomly
-        vehicle = world.spawn_actor(vehicle_bp, vehicle_transform)              # hzx: generate the ego vehicle
-        vehicle.set_autopilot(args.no_autopilot)                                 # hzx: default:True, run autopilot
-
-        sensor_queue = Queue(maxsize=10)
-
-        # hzx: add a rgb camera
-        camera_bp = world.get_blueprint_library().find('sensor.camera.rgb')
-        camera_bp.set_attribute('image_size_x', str(1920))                      # hzx: image width
-        camera_bp.set_attribute('image_size_y', str(1080))                      # hzx: image height
-        camera_bp.set_attribute('fov', '90')                                    # hzx: image field of view
-        camera_bp.set_attribute('sensor_tick', str(0.04))                       # hzx: simulation seconds between sensor captures (ticks)
-
-        user_offset = carla.Location(args.x, args.y, args.z)
-        # camera relative position related to the vehicle
-        #camera_transform = carla.Transform(carla.Location(0, 0, 2))
-        camera_transform = carla.Transform(carla.Location(x=-0.5, z=1.8) + user_offset)
-        camera = world.spawn_actor(camera_bp, camera_transform, attach_to=vehicle)
-        # set the callback function
-        camera.listen(lambda image_data: camera_callback(image_data, sensor_queue))
-        sensor_list.append(camera)
-
-
-        lidar_bp = generate_lidar_bp(args, world, blueprint_library, delta)
-
-        
-        lidar_transform = carla.Transform(carla.Location(x=-0.5, z=1.8) + user_offset)
-
-        lidar = world.spawn_actor(lidar_bp, lidar_transform, attach_to=vehicle)
-
-        point_list = o3d.geometry.PointCloud()
-        if args.semantic:
-            lidar.listen(lambda data: semantic_lidar_callback(data, point_list))
-        else:
-            lidar.listen(lambda data: lidar_callback(data, point_list))
-
-        vis = o3d.visualization.Visualizer()
-        vis.create_window(
-            window_name='Carla Lidar',
-            width=960,
-            height=540,
-            left=480,
-            top=270)
-        vis.get_render_option().background_color = [0.05, 0.05, 0.05]
-        vis.get_render_option().point_size = 1
-        vis.get_render_option().show_coordinate_frame = True
-
-        if args.show_axis:
-            add_open3d_axis(vis)
-
-        frame = 0
-        dt0 = datetime.now()
-        while True:
-            if frame == 2:
-                vis.add_geometry(point_list)
-            vis.update_geometry(point_list)
-
-            vis.poll_events()
-            vis.update_renderer()
-            # # This can fix Open3D jittering issues:
-            time.sleep(0.005)
-            world.tick()
-
-            s_frame = sensor_queue.get(True, 1.0)
-
-            process_time = datetime.now() - dt0
-            sys.stdout.write('\r' + 'FPS: ' + str(1.0 / process_time.total_seconds()))
-            sys.stdout.flush()
-            dt0 = datetime.now()
-            frame += 1
-
-    finally:
-        world.apply_settings(original_settings)
-        traffic_manager.set_synchronous_mode(False)
-
-        vehicle.destroy()
-        lidar.destroy()
-        vis.destroy_window()
-
-
-
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print(' - Exited by user.')
-
-'''
 
