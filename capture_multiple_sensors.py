@@ -8,18 +8,7 @@
 
 
 """
-Sensor synchronization example for CARLA
-
-The communication model for the syncronous mode in CARLA sends the snapshot
-of the world and the sensors streams in parallel.
-We provide this script as an example of how to syncrononize the sensor
-data gathering in the client.
-To to this, we create a queue that is being filled by every sensor when the
-client receives its data and the main loop is blocked until all the sensors
-have received its data.
-This suppose that all the sensors gather information at every tick. It this is
-not the case, the clients needs to take in account at each frame how many
-sensors are going to tick at each frame.
+We provide an example code to capture data for multiple sensors in synchronous mode on [Carla](https://carla.org/) platform.
 """
 
 import glob
