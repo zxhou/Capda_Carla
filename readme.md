@@ -5,6 +5,8 @@ We provide an example code to capture data for multiple sensors in synchronous m
 
 CARLA is an open-source autonomous driving simulator. The simulation platform supports flexible specification of sensor suites, environmental conditions, full control of all static and dynamic actors, maps generation and much more.
 
+![](./demo.png)
+
 #### Features
 * synchronous mode
 * lidar, camera and gnss sensor
