@@ -237,6 +237,17 @@ def sensor_callback(sensor_data, sensor_queue, sensor_name, args):
             if not os.path.exists(outputGnssPath):
                 os.makedirs(outputGnssPath)
             np.savetxt(outputGnssPath+str(filename)+'.txt', data)
+    if 'imu' in sensor_name:
+        #print(sensor_data.accelerometer, sensor_data.gyroscope, sensor_data.compass)
+        data = np.array([sensor_data.accelerometer.x, sensor_data.accelerometer.y, sensor_data.accelerometer.z, \
+                         sensor_data.gyroscope.x, sensor_data.gyroscope.y, sensor_data.gyroscope.z,sensor_data.compass])
+        if args.save:
+            outputIMUPath = '../output/imu/'
+            filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+            if not os.path.exists(outputIMUPath):
+                os.makedirs(outputIMUPath)
+            np.savetxt(outputIMUPath+str(filename)+'.txt', data)        
+            
     if 'camera' in sensor_name:
         sensor_queue.put((sensor_data.frame, sensor_name, array))
     elif 'lidar' in sensor_name:
@@ -319,6 +330,9 @@ def main():
         # hzx: Blueprints for the gnss
         gnss_bp = blueprint_library.find('sensor.other.gnss')
 
+        # hzx: Blueprints for the IMU
+        imu_bp = blueprint_library.find('sensor.other.imu')
+
 
 
         user_offset = carla.Location(args.x, args.y, args.z)
@@ -352,6 +366,11 @@ def main():
         gnss = world.spawn_actor(gnss_bp, gnss_transform, attach_to=vehicle)
         gnss.listen(lambda data: sensor_callback(data, sensor_queue, "gnss", args))
         sensor_list.append(gnss)
+
+        imu_transform = carla.Transform(carla.Location(x=-0.5, z=1.8) + user_offset)
+        imu = world.spawn_actor(imu_bp, imu_transform, attach_to=vehicle)
+        imu.listen(lambda data: sensor_callback(data, sensor_queue, "imu", args))
+        sensor_list.append(imu)
 
         print('display the lidar and camera image')
         # hzx: lidar display window

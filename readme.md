@@ -9,7 +9,7 @@ CARLA is an open-source autonomous driving simulator. The simulation platform su
 
 #### Features
 * synchronous mode
-* lidar, camera and gnss sensor
+* lidar, camera, gnss and IMU
 * save the data to the disk
 * display mode
 * follow ego vehicle in bird's-eye view
