@@ -148,6 +148,7 @@ def parser():
         default=0.0,
         type=float,
         help='offset in the sensor position in the Z-axis in meters (default: 0.0)')
+    '''
     argparser.add_argument(
         '--im-width',
         default=1920,
@@ -160,11 +161,16 @@ def parser():
         type=int,
         help='image height (default: 1080)'
     )
+    '''
     argparser.add_argument(
         '-s', '--save',
         action='store_false',
         help='disables to save the data to the disk')
-        
+    argparser.add_argument(
+        '--set_start_end',
+        action='store_true',
+        help='set start and destination position')
+
     return argparser.parse_args()
 
 
@@ -230,7 +236,9 @@ def sensor_callback(sensor_data, sensor_queue, sensor_name, args):
         
         
     if 'gnss' in sensor_name:
-        data = np.array([sensor_data.latitude, sensor_data.longitude, sensor_data.altitude])
+        data = np.array([sensor_data.transform.location.x, sensor_data.transform.location.y, sensor_data.transform.location.z, \
+            sensor_data.transform.rotation.pitch, sensor_data.transform.rotation.yaw, sensor_data.transform.rotation.roll, \
+            sensor_data.latitude, sensor_data.longitude, sensor_data.altitude])
         if args.save:
             outputGnssPath = '../output/gnss/'
             filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
@@ -272,6 +280,19 @@ def lidarDisplayWin():
 
     return vis
 
+def set_start_end_pos(world):
+    
+    '''TODO: specify positions as the start and destination'''
+
+    all_optional_position = world.get_map().get_spawn_points()
+    spawn_position = random.choice(all_optional_position)
+    random.shuffle(all_optional_position)
+    if all_optional_position[0] != spawn_position:
+        destination = all_optional_position[0]
+    else:
+        destination = all_optional_position[1]
+    return spawn_position, destination
+
 
 
 def main():
@@ -293,7 +314,7 @@ def main():
 
         # We set CARLA syncronous mode
         delta = 0.05
-        settings.fixed_delta_seconds = delta                        # hzx: set fixed time-step, one tick = 5ms, i.e. 20fps
+        settings.fixed_delta_seconds = delta                        # hzx: set fixed time-step, one tick = 50ms, i.e. 20fps
         settings.synchronous_mode = True                            # hzx: In synchronous mode, server will wait the client to finish its current work, then update
         settings.no_rendering_mode = args.no_rendering
         world.apply_settings(settings)
@@ -302,7 +323,11 @@ def main():
         # hzx: create ego vehicle
         blueprint_library = world.get_blueprint_library()                        # hzx: create blueprint object
         vehicle_bp = blueprint_library.filter(args.filter)[0]                    # hzx: get the vehicle(model3)
-        vehicle_transform = random.choice(world.get_map().get_spawn_points())    # hzx: generate the spawn position randomly
+        if args.set_start_end:
+            vehicle_transform, vehicle_destination = set_start_end_pos(world)
+        else:
+            vehicle_transform = random.choice(world.get_map().get_spawn_points())    # hzx: generate the spawn position randomly
+        #print('start position:', vehicle_transform)
         vehicle = world.spawn_actor(vehicle_bp, vehicle_transform)               # hzx: generate the ego vehicle
         vehicle.set_autopilot(args.no_autopilot)                                 # hzx: default:True, run autopilot
         traffic_manager.ignore_lights_percentage(vehicle, 100)                   # hzx: ignore the traffic ligths   
