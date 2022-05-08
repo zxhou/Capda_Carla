@@ -36,7 +36,6 @@ except IndexError:
 
 import carla
 
-
 VIRIDIS = np.array(cm.get_cmap('plasma').colors)
 VID_RANGE = np.linspace(0.0, 1.0, VIRIDIS.shape[0])
 LABEL_COLORS = np.array([
@@ -148,20 +147,6 @@ def parser():
         default=0.0,
         type=float,
         help='offset in the sensor position in the Z-axis in meters (default: 0.0)')
-    '''
-    argparser.add_argument(
-        '--im-width',
-        default=1920,
-        type=int,
-        help='image width (default: 1920)'
-    )
-    argparser.add_argument(
-        '--im-height',
-        default=1080,
-        type=int,
-        help='image height (default: 1080)'
-    )
-    '''
     argparser.add_argument(
         '-s', '--save',
         action='store_false',
@@ -281,7 +266,7 @@ def lidarDisplayWin():
     return vis
 
 def set_start_end_pos(world):
-    
+
     '''TODO: specify positions as the start and destination'''
 
     all_optional_position = world.get_map().get_spawn_points()
@@ -299,7 +284,7 @@ def main():
     # We start creating the client
 
     args = parser()
-    #args.width, args.height = [int(x) for x in args.res.split('x')]
+
     client = carla.Client(args.host, args.port)
     client.set_timeout(2.0)
     world = client.get_world()
