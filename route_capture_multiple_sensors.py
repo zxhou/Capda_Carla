@@ -105,6 +105,8 @@ class World(object):
         self.lane_invasion_sensor = None
         self.gnss_sensor = None
         self.camera_manager = None
+        self.spectator = None
+        self.destination = None
         self._weather_presets = find_weather_presets()
         self._weather_index = 0
         self._actor_filter = args.filter
@@ -136,14 +138,29 @@ class World(object):
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             self.modify_vehicle_physics(self.player)
         while self.player is None:
-            if not self.map.get_spawn_points():
-                print('There are no spawn points available in your map/town.')
-                print('Please add some Vehicle Spawn Point to your UE4 scene.')
-                sys.exit(1)
-            spawn_points = self.map.get_spawn_points()
-            spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
+            if args.fix_route:
+                f = open(args.route, 'r')
+                data = f.readlines()
+                data = data[1:]
+                #print(data)
+                line_split = [float(i) for i in data[0].split(" ") if i != ""]
+                spawn_point = carla.Transform(carla.Location(line_split[0], line_split[1], line_split[2]), \
+                    carla.Rotation(line_split[3], line_split[4], line_split[5]))
+                self.destination = carla.Location(line_split[6], line_split[7], line_split[8])
+
+            else:
+                if not self.map.get_spawn_points():
+                    print('There are no spawn points available in your map/town.')
+                    print('Please add some Vehicle Spawn Point to your UE4 scene.')
+                    sys.exit(1)
+                spawn_points = self.map.get_spawn_points()
+                spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
+                #print('spawn point:', spawn_point)
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             self.modify_vehicle_physics(self.player)
+
+        self.spectator = self.world.get_spectator()
+        #ori_spec_tran = self.spectator.get_transform()
 
         if self._args.sync:
             self.world.tick()
@@ -718,9 +735,14 @@ def game_loop(args):
 
 
         # Set the agent destination
-        spawn_points = world.map.get_spawn_points()
-        destination = random.choice(spawn_points).location
-        agent.set_destination(destination)
+        if args.fix_route:
+            agent.set_destination(world.destination)
+            print(world.destination)
+        else:
+            spawn_points = world.map.get_spawn_points()
+            destination = random.choice(spawn_points).location
+            agent.set_destination(destination)
+            print(destination)
 
         clock = pygame.time.Clock()
 
@@ -736,6 +758,9 @@ def game_loop(args):
             world.tick(clock)
             world.render(display)
             pygame.display.flip()
+
+            spec_transform = world.player.get_transform()
+            world.spectator.set_transform(carla.Transform(spec_transform.location + carla.Location(z=40), carla.Rotation(pitch=-90)))
 
             #print(destination, world.player.get_transform().location)
 
@@ -829,6 +854,20 @@ def main():
     argparser.add_argument(
         '--enable_traffic_light',
         help='enable_traffic_light (default: False)',
+        action='store_true')
+    argparser.add_argument(
+        '-o', '--output',
+        help='Set output directory (default: ../output/)',
+        default='../output/',
+        type=str)
+    argparser.add_argument(
+        '--route',
+        help='Set the route file (default: ./Town07.txt)',
+        default='./Town07.txt',
+        type=str)
+    argparser.add_argument(
+        '--fix_route',
+        help='specify the start and target points (default: False)',
         action='store_true')
 
         

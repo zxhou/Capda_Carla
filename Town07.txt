@@ -1,0 +1,2 @@
+Location.x, Location.y, Location.z, Rotation.pitch, Rotation.yaw, Rotation.roll, target.x, target.y, target.z
+-41.825108 -6.604221 0.600000 0.000000 -90.161217 0.000000 -18.385923 130.210068 0.600000
