@@ -35,6 +35,7 @@ except IndexError:
     pass
 
 import carla
+from agents.navigation.behavior_agent import BehaviorAgent
 
 VIRIDIS = np.array(cm.get_cmap('plasma').colors)
 VID_RANGE = np.linspace(0.0, 1.0, VIRIDIS.shape[0])
@@ -265,20 +266,29 @@ def lidarDisplayWin():
 
     return vis
 
-def set_start_end_pos(world):
-
-    '''TODO: specify positions as the start and destination'''
-
-    all_optional_position = world.get_map().get_spawn_points()
-    spawn_position = random.choice(all_optional_position)
-    random.shuffle(all_optional_position)
-    if all_optional_position[0] != spawn_position:
-        destination = all_optional_position[0]
-    else:
-        destination = all_optional_position[1]
+def set_start_end_pos(world, args, mode = 'random'):
+    if mode == 'random':
+        all_optional_position = world.get_map().get_spawn_points()
+        spawn_position = random.choice(all_optional_position)
+        random.shuffle(all_optional_position)
+        if all_optional_position[0] != spawn_position:
+            destination = all_optional_position[0]
+        else:
+            destination = all_optional_position[1]
+    elif mode == 'manual':
+        all_optional_position = world.get_map().get_spawn_points()
+        spawn_position = random.choice(all_optional_position)
+        destination = random.choice(all_optional_position)
     return spawn_position, destination
 
-
+def modify_vehicle_physics(actor):
+    #If actor is not a vehicle, we cannot use the physics control
+    try:
+        physics_control = actor.get_physics_control()
+        physics_control.use_sweep_wheel_collision = True
+        actor.apply_physics_control(physics_control)
+    except Exception:
+        pass
 
 def main():
     # We start creating the client
@@ -309,19 +319,28 @@ def main():
         blueprint_library = world.get_blueprint_library()                        # hzx: create blueprint object
         vehicle_bp = blueprint_library.filter(args.filter)[0]                    # hzx: get the vehicle
         if args.set_start_end:
-            vehicle_transform, vehicle_destination = set_start_end_pos(world)
+            vehicle_transform, vehicle_destination = set_start_end_pos(world, args, mode='manual')
         else:
-            vehicle_transform = random.choice(world.get_map().get_spawn_points())    # hzx: generate the spawn position randomly
+            # hzx: generate the spawn position and destination randomly
+            vehicle_transform, vehicle_destination = set_start_end_pos(world, args, mode='random')    
         #print('start position:', vehicle_transform)
         vehicle = world.spawn_actor(vehicle_bp, vehicle_transform)               # hzx: generate the ego vehicle
-        vehicle.set_autopilot(args.no_autopilot)                                 # hzx: default:True, run autopilot
-        traffic_manager.ignore_lights_percentage(vehicle, 100)                   # hzx: ignore the traffic ligths   
+        #vehicle = world.try_spawn_actor(vehicle_bp, vehicle_transform)
+        
+        #modify_vehicle_physics(vehicle)
+        #vehicle.set_autopilot(True)                                 # hzx: default:True, run autopilot
+        #traffic_manager.ignore_lights_percentage(vehicle, 100)                   # hzx: ignore the traffic ligths   
 
         # hzx: add spectator for monitoring better
         spectator = world.get_spectator()
         ori_spec_tran = spectator.get_transform()
         #spec_transform = vehicle.get_transform()
         #spectator.set_transform(carla.Transform(spec_transform.location + carla.Location(z=20), carla.Rotation(pitch=-90)))
+
+        # hzx: create agent behavior
+        agent = BehaviorAgent(vehicle, behavior='normal')
+        agent.set_destination(vehicle_destination.location, agent._vehicle.get_location())
+        #print('start:', agent._vehicle.get_location(), 'destination:', vehicle_destination.location)
 
         # We create the sensor queue in which we keep track of the information
         # already received. This structure is thread safe and can be
@@ -395,13 +414,33 @@ def main():
         # Main loop
         while True:
             # Tick the server
+            #agent._update_information()
+
             world.tick()
             w_frame = world.get_snapshot().frame
-            print("\nWorld's frame: %d" % w_frame)
+            #print("\nWorld's frame: %d" % w_frame)
+
+            #print('length waypoints queue:', len(agent._local_planner._waypoints_queue))
+            #if len(agent._local_planner._waypoints_queue) < 1:
+
+
+            #control = agent.run_step()
+            #vehicle.apply_control(control)
+            #if agent.done():
+            #    print('Arrive at the target point!')
+            #    exit()
+
+            speed_limit = vehicle.get_speed_limit()
+            agent.get_local_planner().set_speed(speed_limit)
+
+            control = agent.run_step(debug=True)
+            #control.manual_gear_shift = False
+            vehicle.apply_control(control)
 
             # hzx: set the sectator to follow the ego vehicle
             spec_transform = vehicle.get_transform()
             spectator.set_transform(carla.Transform(spec_transform.location + carla.Location(z=20), carla.Rotation(pitch=-90)))
+            print(vehicle_destination.location, spec_transform.location)
 
             # Now, we wait to the sensors data to be received.
             # As the queue is blocking, we will wait in the queue.get() methods
@@ -411,7 +450,7 @@ def main():
             try:
                 for _ in range(len(sensor_list)):
                     s_frame = sensor_queue.get(True, 1.0)                           # hzx: neccessary for synchronous mode
-                    print("    Frame: %d   Sensor: %s" % (s_frame[0], s_frame[1]))
+                    #print("    Frame: %d   Sensor: %s" % (s_frame[0], s_frame[1]))
                     if 'camera' in s_frame[1]:
                         im_dis = s_frame[2][:, :, ::-1]
                         cv2.imshow("front_cam",im_dis)
