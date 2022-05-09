@@ -304,8 +304,8 @@ def main():
         # of the script to leave the server in the same state that we found it.
         original_settings = world.get_settings()
         settings = world.get_settings()
-        traffic_manager = client.get_trafficmanager(8000)
-        traffic_manager.set_synchronous_mode(True)                  # hzx: In synchronous mode, autopilot depends on the traffic manager
+        #traffic_manager = client.get_trafficmanager(8000)
+        #traffic_manager.set_synchronous_mode(True)                  # hzx: In synchronous mode, autopilot depends on the traffic manager
 
         # We set CARLA syncronous mode
         delta = 0.05
@@ -337,6 +337,7 @@ def main():
         #spec_transform = vehicle.get_transform()
         #spectator.set_transform(carla.Transform(spec_transform.location + carla.Location(z=20), carla.Rotation(pitch=-90)))
 
+        world.tick()
         # hzx: create agent behavior
         agent = BehaviorAgent(vehicle, behavior='normal')
         agent.set_destination(vehicle_destination.location, agent._vehicle.get_location())
@@ -362,8 +363,6 @@ def main():
 
         # hzx: Blueprints for the IMU
         imu_bp = blueprint_library.find('sensor.other.imu')
-
-
 
         user_offset = carla.Location(args.x, args.y, args.z)
 
@@ -416,7 +415,7 @@ def main():
             # Tick the server
             #agent._update_information()
 
-            world.tick()
+            world.tick()            # we need to tick the world once to let the client update the spawn position
             w_frame = world.get_snapshot().frame
             #print("\nWorld's frame: %d" % w_frame)
 
@@ -426,9 +425,9 @@ def main():
 
             #control = agent.run_step()
             #vehicle.apply_control(control)
-            #if agent.done():
-            #    print('Arrive at the target point!')
-            #    exit()
+            if agent.done():
+               print('Arrive at the target point!')
+               break
 
             speed_limit = vehicle.get_speed_limit()
             agent.get_local_planner().set_speed(speed_limit)
@@ -448,6 +447,7 @@ def main():
             # We include a timeout of 1.0 s (in the get method) and if some information is
             # not received in this time we continue.
             try:
+                
                 for _ in range(len(sensor_list)):
                     s_frame = sensor_queue.get(True, 1.0)                           # hzx: neccessary for synchronous mode
                     #print("    Frame: %d   Sensor: %s" % (s_frame[0], s_frame[1]))
@@ -467,6 +467,7 @@ def main():
                         vis.update_renderer()
                         # # This can fix Open3D jittering issues:
                         time.sleep(0.001)
+                
                 frame += 1
 
 
