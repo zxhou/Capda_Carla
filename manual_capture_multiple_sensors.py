@@ -1282,6 +1282,11 @@ def main():
         '--sync',
         action='store_true',
         help='Activate synchronous mode execution')
+    argparser.add_argument(
+        '--outputPath',
+        default='../output/',
+        type=str,
+        help='output path (default: ../output/)')
     args = argparser.parse_args()
 
     args.width, args.height = [int(x) for x in args.res.split('x')]

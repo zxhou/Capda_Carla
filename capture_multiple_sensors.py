@@ -105,7 +105,7 @@ def parser():
     argparser.add_argument(
         '--filter',
         metavar='PATTERN',
-        default='model3',
+        default='vehicle.lincoln.mkz_2020',
         help='actor filter (default: "vehicle.*")')
     argparser.add_argument(
         '--upper-fov',
@@ -307,7 +307,7 @@ def main():
 
         # hzx: create ego vehicle
         blueprint_library = world.get_blueprint_library()                        # hzx: create blueprint object
-        vehicle_bp = blueprint_library.filter(args.filter)[0]                    # hzx: get the vehicle(model3)
+        vehicle_bp = blueprint_library.filter(args.filter)[0]                    # hzx: get the vehicle
         if args.set_start_end:
             vehicle_transform, vehicle_destination = set_start_end_pos(world)
         else:
@@ -319,6 +319,7 @@ def main():
 
         # hzx: add spectator for monitoring better
         spectator = world.get_spectator()
+        ori_spec_tran = spectator.get_transform()
         #spec_transform = vehicle.get_transform()
         #spectator.set_transform(carla.Transform(spec_transform.location + carla.Location(z=20), carla.Rotation(pitch=-90)))
 
@@ -441,6 +442,7 @@ def main():
     finally:
         world.apply_settings(original_settings)     # hzx: back to original setting, otherwise, the world will crash as it can't find the synchronous client
         vehicle.destroy()
+        spectator.set_transform(ori_spec_tran)
         for sensor in sensor_list:
             sensor.destroy()
         vis.destroy_window()
