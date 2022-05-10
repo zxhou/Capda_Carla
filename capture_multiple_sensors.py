@@ -183,31 +183,35 @@ def sensor_callback(sensor_data, sensor_queue, sensor_name, args):
     # Then you just need to add to the queue
 
     if 'camera' in sensor_name:
-         array = np.frombuffer(sensor_data.raw_data, dtype=np.dtype("uint8"))
-         array = np.reshape(array, (600, 800, 4))
-         array = array[:, :, :3]
-         array = array[:, :, ::-1]
-         # array = pygame.surfarray.make_surface(array.swapaxes(0, 1))
-         im = Image.fromarray(array)
-         if not args.not_save:
+        #print(sensor_data)
+        #exit()
+        array = np.frombuffer(sensor_data.raw_data, dtype=np.dtype("uint8"))
+        array = np.reshape(array, (600, 800, 4))
+        array = array[:, :, :3]
+        array = array[:, :, ::-1]
+        # array = pygame.surfarray.make_surface(array.swapaxes(0, 1))
+        im = Image.fromarray(array)
+        if not args.not_save:
             outputImgPath="../output/img/"
-            filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+            #filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+            filename = sensor_data.frame
             if not os.path.exists(outputImgPath):
                 os.makedirs(outputImgPath)
-            im.save(outputImgPath+str(filename)+'.jpg')
+            im.save(outputImgPath+'{:06d}'.format(filename)+'.jpg')
         # sensor_data.save_to_disk(os.path.join('../outputs/output_synchronized', '%06d.png' % sensor_data.frame))
 
     if 'lidar' in sensor_name:
         """Prepares a point cloud with intensity
         colors ready to be consumed by Open3D"""
+        #print(sensor_data)
         data = np.copy(np.frombuffer(sensor_data.raw_data, dtype=np.dtype('f4')))
         data = np.reshape(data, (int(data.shape[0] / 4), 4))
         if not args.not_save:
             outputLidarPath="../output/lidar/"
-            filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+            filename = sensor_data.frame
             if not os.path.exists(outputLidarPath):
                 os.makedirs(outputLidarPath)
-            np.savetxt(outputLidarPath+str(filename)+'.txt', data)
+            np.savetxt(outputLidarPath+'{:06d}'.format(filename)+'.txt', data)
 
         # Isolate the intensity and compute a color for it
         intensity = data[:, -1]
@@ -236,25 +240,28 @@ def sensor_callback(sensor_data, sensor_queue, sensor_name, args):
         
         
     if 'gnss' in sensor_name:
+        #print(sensor_data)
         data = np.array([sensor_data.transform.location.x, sensor_data.transform.location.y, sensor_data.transform.location.z, \
             sensor_data.transform.rotation.pitch, sensor_data.transform.rotation.yaw, sensor_data.transform.rotation.roll, \
             sensor_data.latitude, sensor_data.longitude, sensor_data.altitude])
         if not args.not_save:
             outputGnssPath = '../output/gnss/'
-            filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+            filename = filename = sensor_data.frame
             if not os.path.exists(outputGnssPath):
                 os.makedirs(outputGnssPath)
-            np.savetxt(outputGnssPath+str(filename)+'.txt', data)
+            np.savetxt(outputGnssPath+'{:06d}'.format(filename)+'.txt', data)
     if 'imu' in sensor_name:
+        #print(sensor_data)
         #print(sensor_data.accelerometer, sensor_data.gyroscope, sensor_data.compass)
         data = np.array([sensor_data.accelerometer.x, sensor_data.accelerometer.y, sensor_data.accelerometer.z, \
                          sensor_data.gyroscope.x, sensor_data.gyroscope.y, sensor_data.gyroscope.z,sensor_data.compass])
         if not args.not_save:
             outputIMUPath = '../output/imu/'
-            filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+            filename = filename = sensor_data.frame
+            #print(type(filename))
             if not os.path.exists(outputIMUPath):
                 os.makedirs(outputIMUPath)
-            np.savetxt(outputIMUPath+str(filename)+'.txt', data)        
+            np.savetxt(outputIMUPath+'{:06d}'.format(filename)+'.txt', data)        
             
     if 'camera' in sensor_name:
         sensor_queue.put((sensor_data.frame, sensor_name, array))
