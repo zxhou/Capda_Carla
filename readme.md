@@ -31,6 +31,16 @@ CARLA is an open-source autonomous driving simulator. The simulation platform su
 6. Pillow
 
 #### Run
+* fixed route, you can change the route in route file (e.g.Route_Town07.txt)
+```
+python3 route_capture_multiple_sensors.py --fix_route
+```
+* random route
+```
+python3 route_capture_multiple_sensors.py 
+```
+* random roam on the map
 ```
 python3 capture_multiple_sensors.py
 ```
+

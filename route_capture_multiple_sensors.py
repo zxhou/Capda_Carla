@@ -150,8 +150,8 @@ def parser():
         type=float,
         help='offset in the sensor position in the Z-axis in meters (default: 0.0)')
     argparser.add_argument(
-        '-s', '--save',
-        action='store_false',
+        '--not_save',
+        action='store_true',
         help='disables to save the data to the disk')
     argparser.add_argument(
         '--route',
@@ -185,7 +185,7 @@ def sensor_callback(sensor_data, sensor_queue, sensor_name, args):
          array = array[:, :, ::-1]
          # array = pygame.surfarray.make_surface(array.swapaxes(0, 1))
          im = Image.fromarray(array)
-         if args.save:
+         if not args.not_save:
             outputImgPath="../output/img/"
             filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
             if not os.path.exists(outputImgPath):
@@ -198,7 +198,7 @@ def sensor_callback(sensor_data, sensor_queue, sensor_name, args):
         colors ready to be consumed by Open3D"""
         data = np.copy(np.frombuffer(sensor_data.raw_data, dtype=np.dtype('f4')))
         data = np.reshape(data, (int(data.shape[0] / 4), 4))
-        if args.save:
+        if not args.not_save:
             outputLidarPath="../output/lidar/"
             filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
             if not os.path.exists(outputLidarPath):
@@ -235,7 +235,7 @@ def sensor_callback(sensor_data, sensor_queue, sensor_name, args):
         data = np.array([sensor_data.transform.location.x, sensor_data.transform.location.y, sensor_data.transform.location.z, \
             sensor_data.transform.rotation.pitch, sensor_data.transform.rotation.yaw, sensor_data.transform.rotation.roll, \
             sensor_data.latitude, sensor_data.longitude, sensor_data.altitude])
-        if args.save:
+        if not args.not_save:
             outputGnssPath = '../output/gnss/'
             filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
             if not os.path.exists(outputGnssPath):
@@ -245,7 +245,7 @@ def sensor_callback(sensor_data, sensor_queue, sensor_name, args):
         #print(sensor_data.accelerometer, sensor_data.gyroscope, sensor_data.compass)
         data = np.array([sensor_data.accelerometer.x, sensor_data.accelerometer.y, sensor_data.accelerometer.z, \
                          sensor_data.gyroscope.x, sensor_data.gyroscope.y, sensor_data.gyroscope.z,sensor_data.compass])
-        if args.save:
+        if not args.not_save:
             outputIMUPath = '../output/imu/'
             filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
             if not os.path.exists(outputIMUPath):
@@ -447,7 +447,7 @@ def main():
             speed_limit = vehicle.get_speed_limit()
             agent.get_local_planner().set_speed(speed_limit)
 
-            control = agent.run_step(args, debug=True)
+            control = agent.run_step(args, debug=False)
             #control.manual_gear_shift = False
             vehicle.apply_control(control)
 
