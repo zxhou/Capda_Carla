@@ -44,4 +44,5 @@ python3 route_capture_multiple_sensors.py
 ```
 python3 capture_multiple_sensors.py
 ```
+* If you you want to capture more points in a frame of the Lidar, please close the camera and point cloud display module with the argument `--not_display`.
 

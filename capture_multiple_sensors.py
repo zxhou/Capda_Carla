@@ -130,7 +130,7 @@ def parser():
         help='lidar\'s maximum range in meters (default: 100.0)')
     argparser.add_argument(
         '--points-per-second',
-        default=200000,
+        default=500000,
         type=int,
         help='lidar\'s points per second (default: 500000)')
     argparser.add_argument(
@@ -166,10 +166,11 @@ def parser():
         '--not_save',
         action='store_true',
         help='disables to save the data to the disk')
+
     argparser.add_argument(
-        '--set_start_end',
+        '--not_display',
         action='store_true',
-        help='set start and destination position')
+        help='disables to display camera and lidar')
 
     return argparser.parse_args()
 
@@ -262,13 +263,16 @@ def sensor_callback(sensor_data, sensor_queue, sensor_name, args):
             if not os.path.exists(outputIMUPath):
                 os.makedirs(outputIMUPath)
             np.savetxt(outputIMUPath+'{:06d}'.format(filename)+'.txt', data)        
-            
-    if 'camera' in sensor_name:
-        sensor_queue.put((sensor_data.frame, sensor_name, array))
-    elif 'lidar' in sensor_name:
-        sensor_queue.put((sensor_data.frame, sensor_name, vis_points, vis_colors))
+    if not args.not_display:
+        if 'camera' in sensor_name:
+            sensor_queue.put((sensor_data.frame, sensor_name, array))
+        elif 'lidar' in sensor_name:
+            sensor_queue.put((sensor_data.frame, sensor_name, vis_points, vis_colors))
+        else:
+            sensor_queue.put((sensor_data.frame, sensor_name))
     else:
         sensor_queue.put((sensor_data.frame, sensor_name))
+
 
 def lidarDisplayWin():
     vis = o3d.visualization.Visualizer()
@@ -286,21 +290,6 @@ def lidarDisplayWin():
 #        add_open3d_axis(vis)
 
     return vis
-
-def set_start_end_pos(world):
-    
-    '''TODO: specify positions as the start and destination'''
-
-    all_optional_position = world.get_map().get_spawn_points()
-    spawn_position = random.choice(all_optional_position)
-    random.shuffle(all_optional_position)
-    if all_optional_position[0] != spawn_position:
-        destination = all_optional_position[0]
-    else:
-        destination = all_optional_position[1]
-    return spawn_position, destination
-
-
 
 def main():
     # We start creating the client
@@ -330,10 +319,7 @@ def main():
         # hzx: create ego vehicle
         blueprint_library = world.get_blueprint_library()                        # hzx: create blueprint object
         vehicle_bp = blueprint_library.filter(args.filter)[0]                    # hzx: get the vehicle(model3)
-        if args.set_start_end:
-            vehicle_transform, vehicle_destination = set_start_end_pos(world)
-        else:
-            vehicle_transform = random.choice(world.get_map().get_spawn_points())    # hzx: generate the spawn position randomly
+        vehicle_transform = random.choice(world.get_map().get_spawn_points())    # hzx: generate the spawn position randomly
         #print('start position:', vehicle_transform)
         vehicle = world.spawn_actor(vehicle_bp, vehicle_transform)               # hzx: generate the ego vehicle
         vehicle.set_autopilot(args.no_autopilot)                                 # hzx: default:True, run autopilot
@@ -379,6 +365,7 @@ def main():
         cam01 = world.spawn_actor(cam_bp, camera_transform, attach_to=vehicle)
         # set the callback function
         cam01.listen(lambda data: sensor_callback(data, sensor_queue, "camera01", args))
+
         sensor_list.append(cam01)
 
         #lidar_bp.set_attribute('points_per_second', '100000')
@@ -392,66 +379,72 @@ def main():
         lidar01_transform = carla.Transform(carla.Location(x=-0.5, z=1.8) + user_offset)
         lidar01 = world.spawn_actor(lidar_bp, lidar01_transform, attach_to=vehicle)
         lidar01.listen(lambda data: sensor_callback(data, sensor_queue, "lidar01", args))
+
         sensor_list.append(lidar01)
 
         gnss_transform = carla.Transform(carla.Location(x=-0.5, z=1.8) + user_offset)
         gnss = world.spawn_actor(gnss_bp, gnss_transform, attach_to=vehicle)
         gnss.listen(lambda data: sensor_callback(data, sensor_queue, "gnss", args))
+
         sensor_list.append(gnss)
 
         imu_transform = carla.Transform(carla.Location(x=-0.5, z=1.8) + user_offset)
         imu = world.spawn_actor(imu_bp, imu_transform, attach_to=vehicle)
         imu.listen(lambda data: sensor_callback(data, sensor_queue, "imu", args))
+
         sensor_list.append(imu)
 
-        print('display the lidar and camera image')
-        # hzx: lidar display window
-        point_list = o3d.geometry.PointCloud()
-        vis = lidarDisplayWin()
-        # hzx: image display window
-        cv2.namedWindow("front_cam", 0)
-        #cv2.resizeWindow('front_cam', 400, 300)
+        if not args.not_display:
+            print('display the lidar and camera image')
+            # hzx: lidar display window
+            point_list = o3d.geometry.PointCloud()
+            vis = lidarDisplayWin()
+            # hzx: image display window
+            cv2.namedWindow("front_cam", 0)
 
         frame = 0
         # Main loop
         while True:
             # Tick the server
-            world.tick()
-            w_frame = world.get_snapshot().frame
-            print("\nWorld's frame: %d" % w_frame)
-
-            # hzx: set the sectator to follow the ego vehicle
-            spec_transform = vehicle.get_transform()
-            spectator.set_transform(carla.Transform(spec_transform.location + carla.Location(z=20), carla.Rotation(pitch=-90)))
-
-            # Now, we wait to the sensors data to be received.
-            # As the queue is blocking, we will wait in the queue.get() methods
-            # until all the information is processed and we continue with the next frame.
-            # We include a timeout of 1.0 s (in the get method) and if some information is
-            # not received in this time we continue.
             try:
-                for _ in range(len(sensor_list)):
-                    s_frame = sensor_queue.get(True, 1.0)                           # hzx: neccessary for synchronous mode
-                    print("    Frame: %d   Sensor: %s" % (s_frame[0], s_frame[1]))
-                    if 'camera' in s_frame[1]:
-                        im_dis = s_frame[2][:, :, ::-1]
-                        cv2.imshow("front_cam",im_dis)
-                        cv2.waitKey(1)
+                world.tick()
+                w_frame = world.get_snapshot().frame
+                print("\nWorld's frame: %d" % w_frame)
 
-                    if 'lidar' in s_frame[1]:
-                        point_list.points = s_frame[2]
-                        point_list.colors = s_frame[3]
-                        if frame == 0:
-                            vis.add_geometry(point_list)
-                        vis.update_geometry(point_list)
+                # hzx: set the sectator to follow the ego vehicle
+                spec_transform = vehicle.get_transform()
+                spectator.set_transform(carla.Transform(spec_transform.location + carla.Location(z=40), carla.Rotation(pitch=-90)))
 
-                        vis.poll_events()
-                        vis.update_renderer()
-                        # # This can fix Open3D jittering issues:
-                        time.sleep(0.001)
-                frame += 1
+                # Now, we wait to the sensors data to be received.
+                # As the queue is blocking, we will wait in the queue.get() methods
+                # until all the information is processed and we continue with the next frame.
+                # We include a timeout of 1.0 s (in the get method) and if some information is
+                # not received in this time we continue.      
+                if not args.not_display:    
+                    for _ in range(len(sensor_list)):
+                        s_frame = sensor_queue.get(True, 1.0)                           # hzx: neccessary for synchronous mode                        
+                        print("    Frame: %d   Sensor: %s" % (s_frame[0], s_frame[1]))
+                        if 'camera' in s_frame[1]:
+                            im_dis = s_frame[2][:, :, ::-1]
+                            cv2.imshow("front_cam",im_dis)
+                            cv2.waitKey(1)
 
+                        if 'lidar' in s_frame[1]:
+                            point_list.points = s_frame[2]
+                            point_list.colors = s_frame[3]
+                            if frame == 0:
+                                vis.add_geometry(point_list)
+                                frame = 1
+                            vis.update_geometry(point_list)
 
+                            vis.poll_events()
+                            vis.update_renderer()
+                            # # This can fix Open3D jittering issues:
+                            time.sleep(0.001)
+                else:
+                    for _ in range(len(sensor_list)):
+                        s_frame = sensor_queue.get(True, 1.0)                           # hzx: neccessary for synchronous mode
+                        print("    Frame: %d   Sensor: %s" % (s_frame[0], s_frame[1]))                  
 
             except Empty:
                 print("Some of the sensor information is missed")
@@ -465,8 +458,9 @@ def main():
         vehicle.destroy()
         for sensor in sensor_list:
             sensor.destroy()
-        vis.destroy_window()
-        cv2.destroyAllWindows()
+        if not args.not_display:
+            vis.destroy_window()
+            cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
